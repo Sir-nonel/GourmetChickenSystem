@@ -1,0 +1,8 @@
+Chicken Burger|5|24.950000000000003
+Freedom Fries|4|3.96
+Chai Latte|3|7.5
+Chocolate cake|1|1.5
+Fish Burger|2|7.98
+Double Chicken Burger|6|41.940000000000005
+Sundae Vanilla|6|6.0
+Cappucino|4|12.0
