@@ -2,6 +2,9 @@
 import sqlite3
 from typing import Optional, Tuple
 
+# Registration secret for owner accounts
+OWNER_REGISTRATION_CODE = "Crunchy"
+
 
 def get_connection(db_path: str = "gourmet.db") -> sqlite3.Connection:
 	"""Open and return a sqlite3 connection to `db_path`.
@@ -37,8 +40,8 @@ def username_exists(username: str, conn: Optional[sqlite3.Connection] = None) ->
 			conn.close()
 
 
-def register_user(name: str, username: str, password: str, mobilehp: str,
-				  conn: Optional[sqlite3.Connection] = None) -> Tuple[bool, str]:
+def register_user(name: str, username: str, password: str, mobilehp: str, role: str,
+				  owner_code: str = "", conn: Optional[sqlite3.Connection] = None) -> Tuple[bool, str]:
 	"""Insert a new customer into the `customer` table.
 
 	Rules enforced:
@@ -54,8 +57,13 @@ def register_user(name: str, username: str, password: str, mobilehp: str,
 	returned tuple and display any messages via the GUI layer.
 	"""
 	# Validate inputs
-	if not all([name, username, password, mobilehp]):
-		return False, "all fields (name, username, password, mobilehp) are required"
+	if not all([name, username, password, mobilehp, role]):
+		return False, "all fields (name, username, password, mobilehp, role) are required"
+
+	# If registering as owner, check owner registration code
+	if role == "owner":
+		if owner_code != OWNER_REGISTRATION_CODE:
+			return False, "You are not the owner!"
 
 	close_conn = False
 	if conn is None:
@@ -72,8 +80,8 @@ def register_user(name: str, username: str, password: str, mobilehp: str,
 
 		cur = conn.cursor()
 		cur.execute(
-			"INSERT INTO customer (name, username, password, mobilehp) VALUES (?, ?, ?, ?)",
-			(name, username, password, mobilehp),
+			"INSERT INTO customer (name, username, password, mobilehp, role) VALUES (?, ?, ?, ?, ?)",
+			(name, username, password, mobilehp, role),
 		)
 		conn.commit()
 		return True, ""
@@ -85,8 +93,8 @@ def register_user(name: str, username: str, password: str, mobilehp: str,
 			conn.close()
 
 
-def login_user(username: str, password: str, conn: Optional[sqlite3.Connection] = None) -> Optional[int]:
-	"""Verify credentials and return `user_id` if successful, else None.
+def login_user(username: str, password: str, conn: Optional[sqlite3.Connection] = None) -> Optional[Tuple[int, str]]:
+	"""Verify credentials and return `(user_id, role)` if successful, else None.
 
 	Does not print or prompt. Caller must handle the returned value.
 	"""
@@ -100,12 +108,12 @@ def login_user(username: str, password: str, conn: Optional[sqlite3.Connection] 
 	try:
 		cur = conn.cursor()
 		cur.execute(
-			"SELECT user_id FROM customer WHERE username = ? AND password = ? LIMIT 1",
+			"SELECT user_id, role FROM customer WHERE username = ? AND password = ? LIMIT 1",
 			(username, password),
 		)
 		row = cur.fetchone()
 		if row:
-			return int(row[0])
+			return int(row[0]), row[1]
 		return None
 	except sqlite3.Error:
 		return None
