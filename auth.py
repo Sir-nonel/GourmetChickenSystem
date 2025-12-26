@@ -7,21 +7,12 @@ OWNER_REGISTRATION_CODE = "Crunchy"
 
 
 def get_connection(db_path: str = "gourmet.db") -> sqlite3.Connection:
-	"""Open and return a sqlite3 connection to `db_path`.
-
-	This function only opens the connection; it does not create tables or run
-	any queries.
-	"""
+	"""Return a sqlite3 connection to the application's database file."""
 	return sqlite3.connect(db_path)
 
 
 def username_exists(username: str, conn: Optional[sqlite3.Connection] = None) -> bool:
-	"""Return True if `username` exists in the `customer` table, else False.
-
-	If `conn` is provided it will be used and not closed by this function.
-	If `conn` is omitted the function opens and closes its own connection.
-	Any database error results in False (caller can decide how to handle it).
-	"""
+	"""Return whether the given username already exists in the customer table."""
 	close_conn = False
 	if conn is None:
 		try:
@@ -42,20 +33,7 @@ def username_exists(username: str, conn: Optional[sqlite3.Connection] = None) ->
 
 def register_user(name: str, username: str, password: str, mobilehp: str, role: str,
 				  owner_code: str = "", conn: Optional[sqlite3.Connection] = None) -> Tuple[bool, str]:
-	"""Insert a new customer into the `customer` table.
-
-	Rules enforced:
-	- All fields must be provided (non-empty)
-	- `username` must be unique
-
-	Return contract (always a tuple):
-	- (True, "") on success
-	- (False, "short human-readable message") on failure
-
-	This function performs no input/output and does not prompt or print.
-	It also does not raise on expected failures; callers should inspect the
-	returned tuple and display any messages via the GUI layer.
-	"""
+	"""Register a new user in the customer table and return success status."""
 	# Validate inputs
 	if not all([name, username, password, mobilehp, role]):
 		return False, "all fields (name, username, password, mobilehp, role) are required"
@@ -94,10 +72,7 @@ def register_user(name: str, username: str, password: str, mobilehp: str, role: 
 
 
 def login_user(username: str, password: str, conn: Optional[sqlite3.Connection] = None) -> Optional[Tuple[int, str]]:
-	"""Verify credentials and return `(user_id, role)` if successful, else None.
-
-	Does not print or prompt. Caller must handle the returned value.
-	"""
+	"""Authenticate credentials and return the user's id and role on success."""
 	close_conn = False
 	if conn is None:
 		try:

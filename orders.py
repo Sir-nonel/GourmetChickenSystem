@@ -1,13 +1,10 @@
 import sqlite3
+import sales as sales_mod
 from typing import List, Dict, Optional
 
 
 def get_connection(db_path: str = "gourmet.db") -> Optional[sqlite3.Connection]:
-    """Open and return a sqlite3 connection to `db_path`.
-
-    Returns the connection on success or `None` if a connection cannot be
-    established. Caller is responsible for closing the connection when done.
-    """
+    """Return a sqlite3 connection to the application's database file or None."""
     try:
         return sqlite3.connect(db_path)
     except sqlite3.Error:
@@ -16,19 +13,56 @@ def get_connection(db_path: str = "gourmet.db") -> Optional[sqlite3.Connection]:
 
 def add_order_item(user_id: int, menu_cat: str, menu_item: str, quantity: int,
                    item_total: float, status: str = "pending") -> None:
-    """Insert a new order item row into the `custorder` table.
-
-    This function does not raise. On DB errors it returns without effect.
-    """
+    """Add an item to the user's cart, merging with an existing cart row if present."""
     conn = get_connection()
     if conn is None:
         return
     try:
         cur = conn.cursor()
+
+        # check if item already exists in the user's cart (order_id IS NULL)
         cur.execute(
-            "INSERT INTO custorder (user_id, menu_cat, menu_item, quantity, item_total) VALUES (?, ?, ?, ?, ?)",
-            (user_id, menu_cat, menu_item, quantity, item_total),
+            """
+            SELECT order_item_id, quantity, item_total
+            FROM custorder
+            WHERE user_id = ?
+              AND menu_cat = ?
+              AND menu_item = ?
+              AND order_id IS NULL
+            """,
+            (user_id, menu_cat, menu_item),
         )
+        row = cur.fetchone()
+
+        if row:
+            order_item_id, old_qty, old_total = row
+            try:
+                new_qty = int(old_qty) + int(quantity)
+            except Exception:
+                new_qty = quantity
+            try:
+                new_total = float(old_total) + float(item_total)
+            except Exception:
+                new_total = item_total
+
+            cur.execute(
+                """
+                UPDATE custorder
+                SET quantity = ?, item_total = ?
+                WHERE order_item_id = ?
+                """,
+                (new_qty, new_total, order_item_id),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO custorder
+                (user_id, menu_cat, menu_item, quantity, item_total)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (user_id, menu_cat, menu_item, quantity, item_total),
+            )
+
         conn.commit()
     except sqlite3.Error:
         return
@@ -37,10 +71,7 @@ def add_order_item(user_id: int, menu_cat: str, menu_item: str, quantity: int,
 
 
 def create_order_for_user(user_id: int) -> Optional[int]:
-    """Create a new order for the given user with status 'preparing'.
-
-    Returns the new `order_id` on success or `None` on failure.
-    """
+    """Create a new order header for the user with status 'preparing'."""
     conn = get_connection()
     if conn is None:
         return None
@@ -59,9 +90,7 @@ def create_order_for_user(user_id: int) -> Optional[int]:
 
 
 def assign_cart_items_to_order(user_id: int, order_id: int) -> None:
-    """Assign any cart items (custorder rows) for `user_id` that are not
-    yet assigned to an order to the provided `order_id`.
-    """
+    """Attach the user's unassigned cart items to the specified order id."""
     conn = get_connection()
     if conn is None:
         return
@@ -79,10 +108,7 @@ def assign_cart_items_to_order(user_id: int, order_id: int) -> None:
 
 
 def get_preparing_orders() -> List[Dict]:
-    """Return list of orders currently in 'preparing' status.
-
-    Each dict contains: order_id, user_id, created_at
-    """
+    """Return a list of orders currently marked as preparing along with metadata."""
     conn = get_connection()
     if conn is None:
         return []
@@ -108,16 +134,7 @@ def get_preparing_orders() -> List[Dict]:
 
 
 def get_active_orders_for_user(user_id: int) -> List[Dict]:
-    """
-    Returns:
-    [
-      {
-        "order_id": int,
-        "status": str,
-        "created_at": str
-      }
-    ]
-    """
+    """Return recent orders for a user including preparing and ready statuses."""
     conn = get_connection()
     if conn is None:
         return []
@@ -143,7 +160,7 @@ def get_active_orders_for_user(user_id: int) -> List[Dict]:
 
 
 def get_order_items(order_id: int) -> List[Dict]:
-    """Return items for a given order_id: menu_item, quantity, item_total."""
+    """Return the line items for the given order id including quantities and totals."""
     conn = get_connection()
     if conn is None:
         return []
@@ -169,7 +186,7 @@ def get_order_items(order_id: int) -> List[Dict]:
 
 
 def mark_order_ready(order_id: int) -> None:
-    """Mark the order as ready."""
+    """Set the order status to 'ready' and attempt to record sales for it."""
     conn = get_connection()
     if conn is None:
         return
@@ -180,6 +197,44 @@ def mark_order_ready(order_id: int) -> None:
             (order_id,),
         )
         conn.commit()
+        # record sales for completed order: update sales.txt via sales module
+        try:
+            items = get_order_items(order_id)
+            sales_data = sales_mod.load_sales()
+            for it in items:
+                name = it.get("menu_item", "")
+                qty = int(it.get("quantity", 0) or 0)
+                item_total = float(it.get("item_total", 0.0) or 0.0)
+                if qty > 0 and item_total >= 0:
+                    sales_mod.update_sales(sales_data, name, qty, item_total)
+            sales_mod.save_sales(sales_data)
+        except Exception:
+            # do not let sales logging break the order status update
+            pass
+    except sqlite3.Error:
+        return
+    finally:
+        conn.close()
+
+
+def delete_order(order_id: int) -> None:
+    """Remove the order header and all associated custorder rows for an order."""
+    conn = get_connection()
+    if conn is None:
+        return
+    try:
+        cur = conn.cursor()
+        # delete line items first
+        cur.execute(
+            "DELETE FROM custorder WHERE order_id = ?",
+            (order_id,),
+        )
+        # then delete order header
+        cur.execute(
+            "DELETE FROM orders WHERE order_id = ?",
+            (order_id,),
+        )
+        conn.commit()
     except sqlite3.Error:
         return
     finally:
@@ -187,11 +242,7 @@ def mark_order_ready(order_id: int) -> None:
 
 
 def get_pending_orders(user_id: int) -> List[Dict]:
-    """Return a list of pending order items for the given user.
-
-    Each returned dict has keys: order_item_id, user_id, menu_cat, menu_item,
-    quantity, item_total, status. Returns an empty list on error or if none.
-    """
+    """Return the user's pending cart items that are not yet assigned to an order."""
     conn = get_connection()
     if conn is None:
         return []
@@ -222,17 +273,14 @@ def get_pending_orders(user_id: int) -> List[Dict]:
 
 
 def update_order_item(order_item_id: int, new_quantity: int, new_item_total: float) -> None:
-    """Update quantity and item_total for a pending order item.
-
-    Only updates rows with status 'pending'. Swallows DB errors.
-    """
+    """Update quantity and item total for a cart row identified by order_item_id."""
     conn = get_connection()
     if conn is None:
         return
     try:
         cur = conn.cursor()
         cur.execute(
-            "UPDATE custorder SET quantity = ?, item_total = ? WHERE order_item_id = ? AND status = 'pending'",
+            "UPDATE custorder SET quantity = ?, item_total = ? WHERE order_item_id = ?",
             (new_quantity, new_item_total, order_item_id),
         )
         conn.commit()
@@ -243,17 +291,14 @@ def update_order_item(order_item_id: int, new_quantity: int, new_item_total: flo
 
 
 def delete_order_item(order_item_id: int) -> None:
-    """Delete a pending order item by its id.
-
-    Only deletes rows with status 'pending'. Swallows DB errors.
-    """
+    """Delete a cart row identified by its order_item_id."""
     conn = get_connection()
     if conn is None:
         return
     try:
         cur = conn.cursor()
         cur.execute(
-            "DELETE FROM custorder WHERE order_item_id = ? AND status = 'pending'",
+            "DELETE FROM custorder WHERE order_item_id = ?",
             (order_item_id,),
         )
         conn.commit()

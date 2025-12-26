@@ -1,7 +1,5 @@
 def load_menu(path="menu.txt"):
-	"""Load the menu file and return a nested dict:
-	{ "Category": { "Item Name": price_float, ... }, ... }
-	"""
+	"""Load the menu file and return a nested mapping of categories to items."""
 	menu = {}
 	cat = None
 	with open(path, encoding="utf-8") as f:
@@ -25,8 +23,7 @@ def load_menu(path="menu.txt"):
 
 
 def get_price(menu, category, item_name):
-	"""Return the price (float) for the given category and item name.
-	"""
+	"""Return the numeric price for a menu item from the loaded menu data."""
 	if menu is None:
 		raise ValueError("menu is missing")
 	return menu.get(category, {}).get(item_name)

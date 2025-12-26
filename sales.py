@@ -2,14 +2,7 @@ from typing import Dict, Any, List
 
 
 def load_sales(path: str = "sales.txt") -> Dict[str, Dict[str, float]]:
-    """Load sales data from `path` into an in-memory dict.
-
-    Return structure:
-    {
-        "Chicken Burger": {"quantity": 10, "revenue": 49.9},
-        "Tea": {"quantity": 5, "revenue": 9.95},
-    }
-    """
+    """Load cumulative sales data from a text file into an in-memory dict."""
     sales: Dict[str, Dict[str, float]] = {}
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -38,18 +31,7 @@ def load_sales(path: str = "sales.txt") -> Dict[str, Dict[str, float]]:
 
 def update_sales(sales_data: Dict[str, Dict[str, float]], item_name: str,
                  quantity: int, item_total: float) -> None:
-    """Update `sales_data` for a single sold item.
-
-    Parameters:
-    - sales_data: the in-memory sales dict returned by `load_sales`
-    - item_name: menu item name to update
-    - quantity: number of units sold in this update
-    - item_total: total revenue for these units (quantity * unit_price)
-
-    Behavior:
-    - Add a new entry if `item_name` is not present
-    - Increment `quantity` and `revenue` for the item
-    """
+    """Update in-memory sales totals for a given item by adding quantity and revenue."""
     if sales_data is None:
         return
     if not isinstance(quantity, int):
@@ -75,16 +57,7 @@ def update_sales(sales_data: Dict[str, Dict[str, float]], item_name: str,
 
 
 def save_sales(sales_data: Dict[str, Dict[str, float]], path: str = "sales.txt") -> None:
-    """Persist `sales_data` to `path`.
-
-        Writes `sales_data` to `path`, one line per item using the format:
-        `item_name|quantity|revenue`.
-
-        - `sales_data` is expected to be a dict mapping item_name -> dict with
-            keys `quantity` (int) and `revenue` (float).
-        - Function performs file I/O and overwrites the target file.
-        - On file errors (OSError) the function returns without raising.
-        """
+    """Write cumulative sales totals to a text file in item|quantity|revenue format."""
     if sales_data is None:
         return
     try:
@@ -104,16 +77,7 @@ def save_sales(sales_data: Dict[str, Dict[str, float]], path: str = "sales.txt")
 
 
 def get_sales_summary(sales_data: Dict[str, Dict[str, float]]) -> List[Dict[str, Any]]:
-    """Return a list-of-dicts summary suitable for display layers.
-
-    Example return value:
-    [
-      {"item_name": "Chicken Burger", "quantity": 10, "revenue": 49.9},
-      {"item_name": "Tea", "quantity": 5, "revenue": 9.95},
-    ]
-
-    This is a pure transformation of `sales_data` and does not perform I/O.
-    """
+    """Transform in-memory sales data into a list-of-dicts for display purposes."""
     if not sales_data:
         return []
     result: List[Dict[str, Any]] = []

@@ -11,6 +11,7 @@ from typing import Dict, Optional
 
 
 class App(tk.Tk):
+    """Main application window that manages frames, routing, and global state."""
     def __init__(self, menu_data: Optional[Dict[str, Dict[str, float]]] = None):
         super().__init__()
         self.title("Gourmet Chicken System")
@@ -34,6 +35,7 @@ class App(tk.Tk):
         self.show_frame("LoginFrame")
 
     def show_frame(self, name: str) -> None:
+        """Switch to a named frame and call its optional `on_show` handler."""
         frame = self.frames[name]
         if hasattr(frame, "on_show"):
             try:
@@ -44,6 +46,7 @@ class App(tk.Tk):
 
 
 class LoginFrame(tk.Frame):
+    """Login screen that authenticates users and routes them by role."""
     def __init__(self, parent, controller: App):
         super().__init__(parent)
         self.controller = controller
@@ -68,6 +71,7 @@ class LoginFrame(tk.Frame):
         tk.Button(btn_frame, text="Register", command=lambda: controller.show_frame("RegisterFrame")).grid(row=0, column=1, padx=5)
 
     def do_login(self) -> None:
+        """Authenticate the entered credentials and navigate to the appropriate view."""
         username = self.username_entry.get().strip()
         password = self.password_entry.get()
         res = auth_mod.login_user(username, password)
@@ -86,6 +90,7 @@ class LoginFrame(tk.Frame):
 
 
 class RegisterFrame(tk.Frame):
+    """Registration screen for creating new customer or owner accounts."""
     def __init__(self, parent, controller: App):
         super().__init__(parent)
         self.controller = controller
@@ -133,6 +138,7 @@ class RegisterFrame(tk.Frame):
         tk.Button(btn_frame, text="Back", command=lambda: controller.show_frame("LoginFrame")).grid(row=0, column=1, padx=5)
 
     def do_register(self) -> None:
+        """Collect registration data and create a new user via the auth module."""
         name = self.name_entry.get().strip()
         username = self.username_entry.get().strip()
         password = self.password_entry.get()
@@ -152,6 +158,7 @@ class RegisterFrame(tk.Frame):
             messagebox.showerror("Registration Failed", msg)
 
     def update_role_ui(self) -> None:
+        """Show or hide the owner code input depending on selected role."""
         try:
             role = self.role_var.get()
         except Exception:
@@ -167,6 +174,7 @@ class RegisterFrame(tk.Frame):
 
 
 class MenuFrame(tk.Frame):
+    """Menu browsing screen that allows selecting items and adding them to cart."""
     def __init__(self, parent, controller: App):
         super().__init__(parent)
         self.controller = controller
@@ -198,6 +206,7 @@ class MenuFrame(tk.Frame):
         self.populate_items()
 
     def build_menu(self) -> None:
+        """Rebuild the menu widget list from the loaded menu data."""
         # Clear previous
         for child in self.canvas.winfo_children():
             child.destroy()
@@ -218,6 +227,7 @@ class MenuFrame(tk.Frame):
             pass
 
     def populate_items(self) -> None:
+        """Populate the item selection combobox with all available menu items."""
         items = []
         for cat, item_map in self.controller.menu_data.items():
             for item in item_map.keys():
@@ -225,6 +235,7 @@ class MenuFrame(tk.Frame):
         self.item_combo["values"] = items
 
     def add_selected_item(self) -> None:
+        """Validate selection and add the chosen menu item to the user's cart."""
         if self.controller.current_user_id is None:
             messagebox.showerror("Not logged in", "Please log in to add items")
             return
@@ -254,11 +265,13 @@ class MenuFrame(tk.Frame):
         messagebox.showinfo("Added", f"Added {qty} x {item_name} to your order")
 
     def logout(self) -> None:
+        """Log out the current user and show the login frame."""
         self.controller.current_user_id = None
         self.controller.show_frame("LoginFrame")
 
 
 class OrdersFrame(tk.Frame):
+    """Customer orders screen that shows active orders and the current cart."""
     def __init__(self, parent, controller: App):
         super().__init__(parent)
         self.controller = controller
@@ -277,8 +290,11 @@ class OrdersFrame(tk.Frame):
         self.confirm_button.pack(side=tk.RIGHT, padx=6)
 
     def on_show(self) -> None:
+        """Refresh order and cart views when this frame is shown."""
         self.refresh()
+
     def refresh(self) -> None:
+        """Reload active orders and pending cart items from the backend and render them."""
         # Clear current content
         for child in self.list_frame.winfo_children():
             child.destroy()
@@ -294,6 +310,7 @@ class OrdersFrame(tk.Frame):
         self.render_cart(self.list_frame, user_id)
 
     def render_active_orders(self, parent, user_id: int) -> None:
+        """Render the user's active orders (preparing and ready) in the given parent widget."""
         tk.Label(parent, text="Active Orders", font=(None, 14, "bold")).pack(anchor="w", pady=(0, 6))
 
         active_orders = orders_mod.get_active_orders_for_user(user_id)
@@ -321,8 +338,19 @@ class OrdersFrame(tk.Frame):
                 except Exception:
                     pass
             tk.Label(oframe, text=f"Total: RM{order_total:.2f}", font=(None, 10, "bold")).pack(anchor="e")
+                # allow customers to delete only orders that are ready
+            if status == "ready":
+                    def do_delete(o_id=order_id):
+                        try:
+                            orders_mod.delete_order(o_id)
+                        except Exception:
+                            messagebox.showerror("Error", "Failed to delete order")
+                        self.refresh()
+
+                    tk.Button(oframe, text="Delete Order", command=do_delete).pack(pady=6)
 
     def render_cart(self, parent, user_id: int) -> None:
+        """Render the user's current cart items and attach update/delete handlers."""
         tk.Label(parent, text="Current Cart", font=(None, 14, "bold")).pack(anchor="w", pady=(10, 6))
 
         pending = orders_mod.get_pending_orders(user_id)
@@ -361,6 +389,7 @@ class OrdersFrame(tk.Frame):
             tk.Button(frame, text="Delete", command=do_delete).grid(row=0, column=4, padx=4)
 
     def confirm_orders(self) -> None:
+        """Create an order from the current cart and mark it preparing."""
         user_id = self.controller.current_user_id
         if user_id is None:
             messagebox.showerror("Not logged in", "Please log in to confirm orders")
@@ -395,9 +424,11 @@ class OwnerSalesFrame(tk.Frame):
         tk.Button(self, text="Back", command=lambda: controller.show_frame("OwnerKitchenFrame")).pack(pady=6)
 
     def on_show(self) -> None:
+        """Refresh the sales summary when this frame becomes visible."""
         self.refresh()
 
     def refresh(self) -> None:
+        """Reload and display sales summary data from the sales module."""
         for child in self.list_frame.winfo_children():
             child.destroy()
         sales_data = sales_mod.load_sales()
@@ -427,9 +458,11 @@ class OwnerKitchenFrame(tk.Frame):
         tk.Button(btn_frame, text="Logout", command=do_logout).pack(side=tk.LEFT, padx=6)
 
     def on_show(self) -> None:
+        """Refresh the preparing orders list when this frame is shown."""
         self.refresh()
 
     def refresh(self) -> None:
+        """Reload the list of preparing orders and render receipts for each."""
         for child in self.list_frame.winfo_children():
             child.destroy()
 
@@ -447,8 +480,7 @@ class OwnerKitchenFrame(tk.Frame):
             # receipt frame
             rframe = tk.Frame(self.list_frame, bd=1, relief=tk.SOLID, padx=8, pady=8)
             rframe.pack(fill=tk.X, pady=6)
-            header = f"Order"
-            # include customer name
+            header = f"Order #{order_id}"
             if customer_name:
                 name_part = customer_name if customer_name else ""
                 header += f" — {name_part}" if name_part else ""

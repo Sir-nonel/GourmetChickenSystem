@@ -7,15 +7,7 @@ from menu import load_menu
 
 
 def init_database(db_path: str = "gourmet.db") -> None:
-    """Ensure required database tables exist.
-
-    Creates the `customer` and `custorder` tables if they do not already
-    exist. This function performs only DDL and does not modify application
-    data beyond ensuring the schema is present.
-
-    Errors are handled silently (no raises, no prints) so callers can proceed
-    or report errors via their own UI logic.
-    """
+    """Ensure the required database tables exist for the application to run."""
     conn = None
     try:
         conn = sqlite3.connect(db_path)
@@ -71,16 +63,7 @@ def init_database(db_path: str = "gourmet.db") -> None:
 
 
 def main(db_path: str = "gourmet.db") -> None:
-    """Program entry point.
-
-    Responsibilities performed here:
-    - Initialize database schema if missing (calls `init_database`).
-
-    Note: This function does not return any value and does not load the
-    menu. The GUI or higher-level launcher should call `menu.load_menu()`
-    (or a cached loader) and pass the resulting structure to components
-    that need it.
-    """
+    """Initialize the database and launch the GUI application."""
     init_database(db_path)
     # load menu once and launch the GUI
     menu_data = load_menu()
